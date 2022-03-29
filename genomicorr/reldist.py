@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 import scipy.stats as ss
 from statsmodels.distributions.empirical_distribution import ECDF
-from scipy.linalg import LinAlgError
+from .utils import calc_pvalue
+
 
 uniDist = ss.uniform(scale=0.5)
 
@@ -30,33 +31,6 @@ class RDTSpace:
     reldist_pval: float = None
     ecdf_corr: float = None
     direction: str = None
-
-
-def calc_pvalue(nulldist: np.ndarray, stat: float, how: str ='right') -> float:
-    if len(nulldist) < 2:
-        raise ValueError('`nulldist` must have multiple elements.')
-    if how not in ('right', 'left'):
-        raise ValueError("how is not one of 'left', 'right'")
-    try:
-        kde = ss.gaussian_kde(nulldist)
-        if how == 'right':
-            pvalue = kde.integrate_box_1d(stat, np.inf)
-        else:
-            pvalue = kde.integrate_box_1d(np.NINF, stat)
-            
-    except LinAlgError:
-        mean_value = nulldist.mean()
-        if stat < mean_value:
-            if how == 'right':
-                pvalue = 1
-            else:
-                pvalue = 0
-        else:
-            if how == 'right':
-                pvalue = 0
-            else:
-                pvalue = 1
-    return pvalue
 
 
 def calc_reldists(q: np.ndarray, r: np.ndarray) -> np.ndarray:
@@ -124,7 +98,6 @@ def reldist_test(dfq: pd.DataFrame, dfr: pd.DataFrame, spaces: tuple =None, subs
         space_data.nq = sum(subspaces_data[subspace].nq for subspace in space_data.subspaces)
         space_data.nr = sum(subspaces_data[subspace].nr for subspace in space_data.subspaces)
     
-        space_reldists = space_data.reldists
         if len(space_reldists) == 0:
             space_data.ks_pval = 1
             space_data.stat = None
