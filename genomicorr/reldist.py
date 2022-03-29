@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Collection
 
 import numpy as np
 import pandas as pd
 import scipy.stats as ss
 from statsmodels.distributions.empirical_distribution import ECDF
-from .utils import calc_pvalue
+from .utils import calc_pvalue, parse_spaces, process_result
 
 
 uniDist = ss.uniform(scale=0.5)
@@ -48,29 +48,30 @@ def reldist_ks_test(rel_dists: np.ndarray) -> float:
     return ss.ks_1samp(rel_dists, uniDist.cdf).pvalue
 
 
-def integrate(func: Callable, low: float =0, high: float =0.5, steps: int=50) -> float:
+def integrate(func: Callable, low: float = 0, high: float = 0.5, steps: int = 50) -> float:
     step_size = (high - low) / steps
     x = np.arange(low, high, step_size)
     return np.sum(func(x) * step_size)
 
 
-def calc_reldist_stat(ecdf: Callable, steps: int =50) -> float:
+def calc_reldist_stat(ecdf: Callable, steps: int = 50) -> float:
     func = lambda x: np.abs(ecdf(x) - uniDist.cdf(x))
     return integrate(func, steps=steps)
 
 
-def null_reldist_stats(size: int, steps: int =50) -> float:
+def null_reldist_stats(size: int, steps: int = 50) -> float:
     return calc_reldist_stat(ECDF(uniDist.rvs(size)), steps=steps)
 
 
-def reldist_test(dfq: pd.DataFrame, dfr: pd.DataFrame, spaces: tuple =None, subspaces: tuple =None, permutations: int =100, output: str ='full') -> pd.DataFrame:
-    subspaces = set(dfq['chrom']) | set(dfr['chrom'])
-    spaces = list(subspaces) + ['whole']
-    
+def process_reldist_subspaces(dfq: pd.DataFrame,
+                              dfr: pd.DataFrame,
+                              subspaces: Collection[str],
+                              subspace_col: str = 'chrom') -> dict:
+
     subspaces_data = {subspace: RDTSubspace() for subspace in subspaces}
     for subspace, subspace_data in subspaces_data.items():
-        sub_dfq = dfq.query('chrom == @subspace')
-        sub_dfr = dfr.query('chrom == @subspace')
+        sub_dfq = dfq.query(f'{subspace_col} == @subspace')
+        sub_dfr = dfr.query(f'{subspace_col} == @subspace')
         nq = sub_dfq.shape[0]
         nr = sub_dfr.shape[0]
         subspace_data.nq = nq
@@ -81,9 +82,17 @@ def reldist_test(dfq: pd.DataFrame, dfr: pd.DataFrame, spaces: tuple =None, subs
             subr_centers = ((sub_dfr['start'] + sub_dfr['end']) // 2).to_numpy()
             subq_centers = ((sub_dfq['start'] + sub_dfq['end']) // 2).to_numpy()
             subspace_data.reldists = calc_reldists(subq_centers, subr_centers)
+    return subspaces_data
 
+
+def process_reldist_spaces(subspaces_data: Collection,
+                           spaces: Collection,
+                           permutations: int) -> Collection:
+    subspaces = tuple(subspaces_data.keys())
     spaces_data = [RDTSpace(name=space) for space in spaces]
     
+
+    # TODO: spaces will be refactored
     for space_data in spaces_data:
         space = space_data.name
         if space == 'whole':
@@ -125,11 +134,25 @@ def reldist_test(dfq: pd.DataFrame, dfr: pd.DataFrame, spaces: tuple =None, subs
                 space_data.direction = 'repulsion'
             else:
                 space_data.direction = 'indifferent'
+    return spaces_data
+
+
+reldist_simple_cols = ("name", "subspaces", "nq", "nr", "ks_pval", "stat", "reldist_pval", "ecdf_corr", "direction")
+
+
+def reldist_test(dfq: pd.DataFrame,
+                 dfr: pd.DataFrame,
+                 spaces: tuple = None,
+                 subspaces: tuple = None,
+                 permutations: int = 100,
+                 output: str = 'full') -> pd.DataFrame:
+
+    total_chroms = set(dfq['chrom']) | set(dfr['chrom'])
+    # TODO: refactor spaces and subspaces
+    spaces, subspaces = parse_spaces(total_chroms, spaces, subspaces)
+
+    subspaces_data = process_reldist_subspaces(dfq, dfr, subspaces)
+    spaces_data = process_reldist_spaces(subspaces_data, spaces, permutations)
     
     result_df = pd.DataFrame(spaces_data)
-    if output == 'full':
-        return result_df
-    elif output == 'simple':
-        return result_df.loc[:, ["name", "subspaces", "nq", "nr", "ks_pval", "stat", "reldist_pval", "ecdf_corr", "direction"]]
-    else:
-        raise ValueError('`output` must be one of "full", "simple".')
+    return process_result(result_df, output, reldist_simple_cols)
