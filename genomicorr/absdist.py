@@ -1,3 +1,4 @@
+from typing import Collection
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass
@@ -39,14 +40,16 @@ def calc_absdist_stat(absdists: np.ndarray) -> float:
     return absdists.mean()
 
 
-def absdist_test(dfq: pd.DataFrame, dfr: pd.DataFrame, chromsizes: dict, spaces: tuple =None, subspaces: tuple =None, permutations: int =100, output: str ='full') -> pd.DataFrame:
-    subspaces = set(dfq['chrom']) | set(dfr['chrom'])
-    spaces = list(subspaces) + ['whole']
-
+def process_absdist_subspaces(dfq: pd.DataFrame,
+                              dfr: pd.DataFrame,
+                              chromsizes: dict,
+                              subspaces: Collection[str],
+                              subspace_col: str = 'chrom',
+                              permutations: int = 100) -> dict:
     subspaces_data = {subspace: ADTSubspace() for subspace in subspaces}
     for subspace, subspace_data in subspaces_data.items():
-        sub_dfq = dfq.query('chrom == @subspace')
-        sub_dfr = dfr.query('chrom == @subspace')
+        sub_dfq = dfq.query(f'{subspace_col} == @subspace')
+        sub_dfr = dfr.query(f'{subspace_col} == @subspace')
         nq = sub_dfq.shape[0]
         nr = sub_dfr.shape[0]
         chromsize = chromsizes.get(subspace, max(sub_dfq['end'].max(), sub_dfr['end'].max()))
@@ -64,16 +67,15 @@ def absdist_test(dfq: pd.DataFrame, dfr: pd.DataFrame, chromsizes: dict, spaces:
             subspace_data.nobs = len(absdists)
             subspace_data.stat = calc_absdist_stat(absdists)
             subspace_data.nulldist = np.array([calc_absdist_stat(calc_absdists(randomize_centers(chromsize, subq_centers.shape[0]), subr_centers, chromsize)) for _ in range(permutations)])
+    return subspaces_data
 
-    spaces_data = [ADTSpace(name=space) for space in spaces]
+
+def process_absdist_spaces(subspaces_data: Collection,
+                           spaces: Collection,
+                           permutations: int) -> Collection:
+    spaces_data = [ADTSpace(name=space_name, subspaces=space_subspaces)
+                   for space_name, space_subspaces in spaces.items()]
     for space_data in spaces_data:
-        space = space_data.name
-        if space == 'whole':
-            space_data.subspaces = subspaces
-        elif space in subspaces:
-            space_data.subspaces = (space,)
-        else:
-            pass
         space_data.nq = sum(subspaces_data[subspace].nq for subspace in space_data.subspaces)
         space_data.nr = sum(subspaces_data[subspace].nr for subspace in space_data.subspaces)
 
@@ -99,11 +101,7 @@ def absdist_test(dfq: pd.DataFrame, dfr: pd.DataFrame, chromsizes: dict, spaces:
             else:
                 space_data.pval = (1 - absdist_pval) * 2
                 space_data.direction = 'repulsion'
+    return spaces_data
 
-    result_df = pd.DataFrame(spaces_data)
-    if output == 'full':
-        return result_df
-    elif output == 'simple':
-        return result_df.loc[:, ["name", "subspaces", "nq", "nr", "stat", "pval", "direction"]]
-    else:
-        raise ValueError('`output` must be one of "full", "simple".')
+
+absdist_simple_cols = ("name", "subspaces", "nq", "nr", "stat", "pval", "direction")

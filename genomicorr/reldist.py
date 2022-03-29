@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as ss
 from statsmodels.distributions.empirical_distribution import ECDF
-from .utils import calc_pvalue, parse_spaces, process_result
+from .utils import calc_pvalue
 
 
 uniDist = ss.uniform(scale=0.5)
@@ -88,20 +88,11 @@ def process_reldist_subspaces(dfq: pd.DataFrame,
 def process_reldist_spaces(subspaces_data: Collection,
                            spaces: Collection,
                            permutations: int) -> Collection:
-    subspaces = tuple(subspaces_data.keys())
-    spaces_data = [RDTSpace(name=space) for space in spaces]
-    
 
-    # TODO: spaces will be refactored
-    for space_data in spaces_data:
-        space = space_data.name
-        if space == 'whole':
-            space_data.subspaces = subspaces
-        elif space in subspaces:
-            space_data.subspaces = (space,)
-        else:
-            pass
-    
+    spaces_data = [RDTSpace(name=space_name, subspaces=space_subspaces)
+                   for space_name, space_subspaces in spaces.items()]
+
+    for space_data in spaces_data:    
         space_reldists = np.concatenate(tuple(subspaces_data[subspace].reldists for subspace in space_data.subspaces))
         space_data.reldists = space_reldists
         space_data.nq = sum(subspaces_data[subspace].nq for subspace in space_data.subspaces)
@@ -138,21 +129,3 @@ def process_reldist_spaces(subspaces_data: Collection,
 
 
 reldist_simple_cols = ("name", "subspaces", "nq", "nr", "ks_pval", "stat", "reldist_pval", "ecdf_corr", "direction")
-
-
-def reldist_test(dfq: pd.DataFrame,
-                 dfr: pd.DataFrame,
-                 spaces: tuple = None,
-                 subspaces: tuple = None,
-                 permutations: int = 100,
-                 output: str = 'full') -> pd.DataFrame:
-
-    total_chroms = set(dfq['chrom']) | set(dfr['chrom'])
-    # TODO: refactor spaces and subspaces
-    spaces, subspaces = parse_spaces(total_chroms, spaces, subspaces)
-
-    subspaces_data = process_reldist_subspaces(dfq, dfr, subspaces)
-    spaces_data = process_reldist_spaces(subspaces_data, spaces, permutations)
-    
-    result_df = pd.DataFrame(spaces_data)
-    return process_result(result_df, output, reldist_simple_cols)
