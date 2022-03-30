@@ -4,9 +4,7 @@ Reimplementation of GenometriCorr statistical tests in Python with Python and CL
 
 ## TODO
 
-* projection test
-* JI test
-* ...
+* Groupped projection test
 * docstrings
 * Python API
 * CLI API
