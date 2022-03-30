@@ -1,9 +1,17 @@
-from typing import Any, Collection, Dict, Tuple, Union
+from typing import Any, Collection, Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import scipy.stats as ss
 from scipy.linalg import LinAlgError
+import numpy.typing as npt
+
+
+NDArrayInt = npt.NDArray[np.int_]
+NDArrayFloat = npt.NDArray[np.float_]
+
+
+__all__ = ['is_collection', 'calc_pvalue', 'parse_spaces', 'process_result']
 
 
 def is_collection(obj: Any) -> bool:
@@ -26,7 +34,7 @@ def calc_pvalue(nulldist: Collection[float],
             
     except LinAlgError:
         mean_value = nulldist.mean()
-        if stat < mean_value:
+        if stat <= mean_value:
             if how == 'right':
                 pvalue = 1
             else:
@@ -40,8 +48,8 @@ def calc_pvalue(nulldist: Collection[float],
 
 
 def parse_spaces(present_subspaces: Collection[str],
-                 spaces: Collection[str] = None,
-                 subspaces: Collection[str] = None,
+                 spaces: Union[None, List[str], Tuple[str], Dict[str, Tuple[str]]] = None,
+                 subspaces: Union[None, List[str], Tuple[str]] = None,
                  whole: bool = True) -> Tuple[Tuple[str], Dict[str, Tuple[str]]]:
     """
     subspaces:
@@ -62,18 +70,21 @@ def parse_spaces(present_subspaces: Collection[str],
         raise ValueError("`subspaces` is not an iterable nor None.")
     
     if spaces is None:
-        spaces = {subspace: (subspace, ) for subspace in subspaces}
+        spaces = {subspace: (subspace, )
+                  for subspace in subspaces}
     elif is_collection(spaces):
         extra_subspaces = set(spaces) - set(subspaces)
         if len(extra_subspaces) > 0:
             raise ValueError(f"`spaces` contains the following extra items: {extra_subspaces}.")
-        spaces = {subspace: (subspace, ) for subspace in spaces}
+        spaces = {subspace: (subspace, )
+                  for subspace in spaces}
     elif isinstance(spaces, dict):
         for space_name, space_subspaces in spaces.items():
             extra_subspaces = set(space_subspaces) - set(subspaces)
             if len(extra_subspaces) > 0:
                 raise ValueError(f"`spaces` contains the following extra items: {extra_subspaces} under the key {space_name}.")
-        spaces = {space_name: tuple(space_subspaces) for space_name, space_subspaces in spaces.items()}
+        spaces = {space_name: tuple(space_subspaces)
+                  for space_name, space_subspaces in spaces.items()}
     else:
         raise ValueError(f"`spaces` is not an iterable, dict or None.")
     if whole:
@@ -81,14 +92,18 @@ def parse_spaces(present_subspaces: Collection[str],
     return subspaces, spaces
 
 
-def process_result(result_df: pd.DataFrame, output: str = 'full', simple_cols: Union[Collection, None] = None) -> pd.DataFrame:
+def process_result(result_df: pd.DataFrame,
+                   output: str = 'full',
+                   simple_cols: Union[Tuple, List, None] = None) -> pd.DataFrame:
     if output == 'full':
         return result_df
     elif output == 'simple':
         if simple_cols is None:
             raise ValueError("Supply simple_cols in case `output`='simple'.")
 
-        inconsistent_cols = [col for col in simple_cols if col not in result_df.columns]
+        inconsistent_cols = [col
+                             for col in simple_cols
+                             if col not in result_df.columns]
         if len(inconsistent_cols) > 0:
             raise ValueError(f"`simple_cols` contains columns that are not in `result_df`: {simple_cols}.")
 

@@ -1,9 +1,9 @@
 from setuptools import setup
 
 
-setup(name='genomicorr',
-      version='0.1.0',
-      description='Genomic regions correlation analysis tools.',
+setup(name='GenomiCorr',
+      version='0.2.0',
+      description='Genomic regions correlation analysis toolkit.',
       url='http://github.com/dmitrymyl/GenomiCorr',
       author='Dmitry Mylarshchikov',
       author_email='dmitrymyl@gmail.com',

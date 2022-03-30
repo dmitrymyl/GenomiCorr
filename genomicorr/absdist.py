@@ -1,15 +1,15 @@
-from typing import Collection
+from typing import Collection, Dict, List, Tuple
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass
-from .utils import calc_pvalue
+from .utils import calc_pvalue, NDArrayInt, NDArrayFloat
 
 
 @dataclass
 class ADTSubspace:
-    absdists: np.ndarray = None
+    absdists: NDArrayFloat = None
     stat: float = None
-    nulldist: np.ndarray = None
+    nulldist: NDArrayFloat = None
     nq: int = None
     nr: int = None
     nobs: int = None
@@ -18,41 +18,46 @@ class ADTSubspace:
 @dataclass
 class ADTSpace:
     name: str = None
-    subspaces: tuple = None
+    subspaces: Tuple[str] = None
     nq: int = None
     nr: int = None
     stat: float = None
-    nulldist: np.ndarray = None
+    nulldist: NDArrayFloat = None
     pval: float = None
     direction: str = None
 
 
-def randomize_centers(chromsize: int, n: int) -> np.ndarray:
+def randomize_centers(chromsize: int,
+                      n: int) -> NDArrayInt:
     rng = np.random.default_rng()
     return rng.integers(low=0, high=chromsize, size=n)
 
 
-def calc_absdists(q: np.ndarray, r: np.ndarray, chromsize: int) -> np.ndarray:
+def calc_absdists(q: NDArrayInt,
+                  r: NDArrayInt,
+                  chromsize: int) -> NDArrayFloat:
     return np.min(np.abs(np.subtract.outer(q, r)), axis=1) * r.shape[0] / chromsize
 
 
-def calc_absdist_stat(absdists: np.ndarray) -> float:
+def calc_absdist_stat(absdists: NDArrayFloat) -> float:
     return absdists.mean()
 
 
 def process_absdist_subspaces(dfq: pd.DataFrame,
                               dfr: pd.DataFrame,
-                              chromsizes: dict,
-                              subspaces: Collection[str],
+                              chromsizes: Dict[str, int],
+                              subspaces: Tuple[str],
                               subspace_col: str = 'chrom',
-                              permutations: int = 100) -> dict:
-    subspaces_data = {subspace: ADTSubspace() for subspace in subspaces}
+                              permutations: int = 100) -> Dict[str, ADTSubspace]:
+    subspaces_data = {subspace: ADTSubspace()
+                      for subspace in subspaces}
     for subspace, subspace_data in subspaces_data.items():
         sub_dfq = dfq.query(f'{subspace_col} == @subspace')
         sub_dfr = dfr.query(f'{subspace_col} == @subspace')
         nq = sub_dfq.shape[0]
         nr = sub_dfr.shape[0]
-        chromsize = chromsizes.get(subspace, max(sub_dfq['end'].max(), sub_dfr['end'].max()))
+        chromsize = chromsizes.get(subspace, max(sub_dfq['end'].max(),
+                                                 sub_dfr['end'].max()))
         subspace_data.nq = nq
         subspace_data.nr = nr
         subspace_data.chromsize = chromsize
@@ -66,20 +71,25 @@ def process_absdist_subspaces(dfq: pd.DataFrame,
             subspace_data.absdists = absdists
             subspace_data.nobs = len(absdists)
             subspace_data.stat = calc_absdist_stat(absdists)
-            subspace_data.nulldist = np.array([calc_absdist_stat(calc_absdists(randomize_centers(chromsize, subq_centers.shape[0]), subr_centers, chromsize)) for _ in range(permutations)])
+            subspace_data.nulldist = np.array([calc_absdist_stat(calc_absdists(randomize_centers(chromsize, subq_centers.shape[0]),
+                                                                               subr_centers,
+                                                                               chromsize))
+                                               for _ in range(permutations)])
     return subspaces_data
 
 
-def process_absdist_spaces(subspaces_data: Collection,
-                           spaces: Collection,
-                           permutations: int) -> Collection:
-    spaces_data = [ADTSpace(name=space_name, subspaces=space_subspaces)
-                   for space_name, space_subspaces in spaces.items()]
+def process_absdist_spaces(subspaces_data: Dict[str, ADTSubspace],
+                           spaces: Dict[str, Tuple[str]]) -> Tuple[ADTSpace]:
+    spaces_data = tuple(ADTSpace(name=space_name, subspaces=space_subspaces)
+                        for space_name, space_subspaces in spaces.items())
     for space_data in spaces_data:
-        space_data.nq = sum(subspaces_data[subspace].nq for subspace in space_data.subspaces)
-        space_data.nr = sum(subspaces_data[subspace].nr for subspace in space_data.subspaces)
+        space_data.nq = sum(subspaces_data[subspace].nq
+                            for subspace in space_data.subspaces)
+        space_data.nr = sum(subspaces_data[subspace].nr
+                            for subspace in space_data.subspaces)
 
-        n_obs = sum(subspaces_data[subspace].nobs for subspace in space_data.subspaces)
+        n_obs = sum(subspaces_data[subspace].nobs
+                    for subspace in space_data.subspaces)
         if n_obs == 0:
             space_data.stat = None
             space_data.nulldist = np.array([])
@@ -88,8 +98,8 @@ def process_absdist_spaces(subspaces_data: Collection,
             
         else:
             space_data.stat = sum(subspaces_data[subspace].stat
-                                for subspace in space_data.subspaces
-                                if subspaces_data[subspace].nobs > 0) / n_obs
+                                  for subspace in space_data.subspaces
+                                  if subspaces_data[subspace].nobs > 0) / n_obs
             
             space_data.nulldist = np.array([subspaces_data[subspace].nulldist * subspaces_data[subspace].nobs
                                             for subspace in space_data.subspaces
@@ -104,4 +114,10 @@ def process_absdist_spaces(subspaces_data: Collection,
     return spaces_data
 
 
-absdist_simple_cols = ("name", "subspaces", "nq", "nr", "stat", "pval", "direction")
+absdist_simple_cols = ("name",
+                       "subspaces",
+                       "nq",
+                       "nr",
+                       "stat",
+                       "pval",
+                       "direction")

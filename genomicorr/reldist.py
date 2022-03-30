@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from typing import Callable, Collection
+from typing import Callable, Dict, Tuple
 
 import numpy as np
 import pandas as pd
 import scipy.stats as ss
 from statsmodels.distributions.empirical_distribution import ECDF
-from .utils import calc_pvalue
+from .utils import calc_pvalue, NDArrayInt, NDArrayFloat
 
 
 uniDist = ss.uniform(scale=0.5)
@@ -13,7 +13,7 @@ uniDist = ss.uniform(scale=0.5)
 
 @dataclass
 class RDTSubspace:
-    reldists: np.ndarray = None
+    reldists: NDArrayFloat = None
     nq: int = None
     nr: int = None
 
@@ -21,19 +21,20 @@ class RDTSubspace:
 @dataclass
 class RDTSpace:
     name: str = None
-    subspaces: tuple = None
-    reldists: np.ndarray = None
+    subspaces: Tuple[str] = None
+    reldists: NDArrayFloat = None
     nq: int = None
     nr: int = None
     ks_pval: float = None
     stat: float = None
-    nulldist: np.ndarray = None
+    nulldist: NDArrayFloat = None
     reldist_pval: float = None
     ecdf_corr: float = None
     direction: str = None
 
 
-def calc_reldists(q: np.ndarray, r: np.ndarray) -> np.ndarray:
+def calc_reldists(q: NDArrayInt,
+                  r: NDArrayInt) -> NDArrayFloat:
     q_mod = q
     if np.min(q) < np.min(r):
         q_mod = q_mod[1:]
@@ -44,29 +45,34 @@ def calc_reldists(q: np.ndarray, r: np.ndarray) -> np.ndarray:
     return rel_dists
 
 
-def reldist_ks_test(rel_dists: np.ndarray) -> float:
+def reldist_ks_test(rel_dists: NDArrayFloat) -> float:
     return ss.ks_1samp(rel_dists, uniDist.cdf).pvalue
 
 
-def integrate(func: Callable, low: float = 0, high: float = 0.5, steps: int = 50) -> float:
+def integrate(func: Callable,
+              low: float = 0,
+              high: float = 0.5,
+              steps: int = 50) -> float:
     step_size = (high - low) / steps
     x = np.arange(low, high, step_size)
     return np.sum(func(x) * step_size)
 
 
-def calc_reldist_stat(ecdf: Callable, steps: int = 50) -> float:
+def calc_reldist_stat(ecdf: Callable,
+                      steps: int = 50) -> float:
     func = lambda x: np.abs(ecdf(x) - uniDist.cdf(x))
     return integrate(func, steps=steps)
 
 
-def null_reldist_stats(size: int, steps: int = 50) -> float:
+def null_reldist_stats(size: int,
+                       steps: int = 50) -> float:
     return calc_reldist_stat(ECDF(uniDist.rvs(size)), steps=steps)
 
 
 def process_reldist_subspaces(dfq: pd.DataFrame,
                               dfr: pd.DataFrame,
-                              subspaces: Collection[str],
-                              subspace_col: str = 'chrom') -> dict:
+                              subspaces: Tuple[str],
+                              subspace_col: str = 'chrom') -> Dict[str, RDTSubspace]:
 
     subspaces_data = {subspace: RDTSubspace() for subspace in subspaces}
     for subspace, subspace_data in subspaces_data.items():
@@ -85,18 +91,21 @@ def process_reldist_subspaces(dfq: pd.DataFrame,
     return subspaces_data
 
 
-def process_reldist_spaces(subspaces_data: Collection,
-                           spaces: Collection,
-                           permutations: int) -> Collection:
+def process_reldist_spaces(subspaces_data: Dict[str, RDTSubspace],
+                           spaces: Dict[str, Tuple[str]],
+                           permutations: int) -> Tuple[RDTSpace]:
 
-    spaces_data = [RDTSpace(name=space_name, subspaces=space_subspaces)
-                   for space_name, space_subspaces in spaces.items()]
+    spaces_data = tuple(RDTSpace(name=space_name, subspaces=space_subspaces)
+                        for space_name, space_subspaces in spaces.items())
 
     for space_data in spaces_data:    
-        space_reldists = np.concatenate(tuple(subspaces_data[subspace].reldists for subspace in space_data.subspaces))
+        space_reldists = np.concatenate(tuple(subspaces_data[subspace].reldists
+                                              for subspace in space_data.subspaces))
         space_data.reldists = space_reldists
-        space_data.nq = sum(subspaces_data[subspace].nq for subspace in space_data.subspaces)
-        space_data.nr = sum(subspaces_data[subspace].nr for subspace in space_data.subspaces)
+        space_data.nq = sum(subspaces_data[subspace].nq
+                            for subspace in space_data.subspaces)
+        space_data.nr = sum(subspaces_data[subspace].nr
+                            for subspace in space_data.subspaces)
     
         if len(space_reldists) == 0:
             space_data.ks_pval = 1
@@ -108,7 +117,8 @@ def process_reldist_spaces(subspaces_data: Collection,
         else:
             space_data.ks_pval = reldist_ks_test(space_reldists)
             space_data.stat = calc_reldist_stat(ECDF(space_reldists), space_reldists.shape[0])
-            space_data.nulldist = np.array([null_reldist_stats(space_reldists.shape[0]) for _ in range(permutations)])
+            space_data.nulldist = np.array([null_reldist_stats(space_reldists.shape[0])
+                                            for _ in range(permutations)])
             
             permut_pval = calc_pvalue(space_data.nulldist, space_data.stat)
             if permut_pval < 0.5:
@@ -128,4 +138,12 @@ def process_reldist_spaces(subspaces_data: Collection,
     return spaces_data
 
 
-reldist_simple_cols = ("name", "subspaces", "nq", "nr", "ks_pval", "stat", "reldist_pval", "ecdf_corr", "direction")
+reldist_simple_cols = ("name",
+                       "subspaces",
+                       "nq",
+                       "nr",
+                       "ks_pval",
+                       "stat",
+                       "reldist_pval",
+                       "ecdf_corr",
+                       "direction")
