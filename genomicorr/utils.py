@@ -1,4 +1,5 @@
-from typing import Any, Collection, Dict, List, Tuple, Union
+from statistics import mean
+from typing import Any, Collection, Dict, List, Tuple, TypeVar, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -9,6 +10,8 @@ import numpy.typing as npt
 
 NDArrayInt = npt.NDArray[np.int_]
 NDArrayFloat = npt.NDArray[np.float_]
+I_gen = TypeVar('I_gen', int, NDArrayInt)
+F_gen = TypeVar('F_gen', float, NDArrayFloat)
 
 
 __all__ = ['is_collection', 'calc_pvalue', 'parse_spaces', 'process_result']
@@ -33,7 +36,7 @@ def calc_pvalue(nulldist: Collection[float],
             pvalue = kde.integrate_box_1d(np.NINF, stat)
             
     except LinAlgError:
-        mean_value = nulldist.mean()
+        mean_value = mean(nulldist)
         if stat <= mean_value:
             if how == 'right':
                 pvalue = 1
@@ -48,9 +51,9 @@ def calc_pvalue(nulldist: Collection[float],
 
 
 def parse_spaces(present_subspaces: Collection[str],
-                 spaces: Union[None, List[str], Tuple[str], Dict[str, Tuple[str]]] = None,
-                 subspaces: Union[None, List[str], Tuple[str]] = None,
-                 whole: bool = True) -> Tuple[Tuple[str], Dict[str, Tuple[str]]]:
+                 spaces: Union[None, List[str], Tuple[str, ...], Dict[str, Tuple[str, ...]]] = None,
+                 subspaces: Union[None, List[str], Tuple[str, ...]] = None,
+                 whole: bool = True) -> Tuple[Tuple[str, ...], Dict[str, Tuple[str, ...]]]:
     """
     subspaces:
         If list, then leave untouched. Or check that subspaces match chromosomes or other grouping variable.
@@ -66,6 +69,7 @@ def parse_spaces(present_subspaces: Collection[str],
         extra_subspaces = set(subspaces) - set(present_subspaces)
         if len(extra_subspaces) > 0:
             raise ValueError(f"`subspaces` contains the following extra items: {extra_subspaces}.")
+        subspaces = tuple(subspaces)
     else:
         raise ValueError("`subspaces` is not an iterable nor None.")
     
@@ -110,3 +114,11 @@ def process_result(result_df: pd.DataFrame,
         return result_df.loc[:, simple_cols]
     else:
         raise ValueError('`output` must be one of "full", "simple".')
+
+
+IF_gen = TypeVar("IF_gen", int, float, NDArrayInt, NDArrayFloat)
+
+def foo(a: I_gen, b: I_gen) -> Union[float, NDArrayFloat]:
+    return a / b
+
+c : float = cast(float, foo(5, 3))

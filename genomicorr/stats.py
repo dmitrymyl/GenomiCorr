@@ -11,8 +11,8 @@ from .reldist import (process_reldist_spaces, process_reldist_subspaces,
                       reldist_simple_cols)
 from .utils import parse_spaces, process_result
 
-SpaceInput = Union[None, List[str], Tuple[str], Dict[str, Tuple[str]]]
-SubspaceInput = Union[None, List[str], Tuple[str]]
+SpaceInput = Union[None, List[str], Tuple[str, ...], Dict[str, Tuple[str, ...]]]
+SubspaceInput = Union[None, List[str], Tuple[str, ...]]
 
 
 __all__ = ['reldist_test', 'absdist_test', 'proj_test', 'jaccard_test']
@@ -119,3 +119,4 @@ def jaccard_test(dfq: pd.DataFrame,
 
     result_df = pd.DataFrame(spaces_data)
     return process_result(result_df, output, jaccard_simple_cols)
+

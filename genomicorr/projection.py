@@ -1,40 +1,40 @@
 from dataclasses import dataclass
 from typing import Dict, Tuple
+
+import bioframe as bf
 import numpy as np
 import pandas as pd
 import scipy.stats as ss
-import bioframe as bf
-
 
 __all__ = ['process_proj_subspaces', 'process_proj_spaces']
 
 
 @dataclass
 class ProjSubspace:
-    nq: int = None
-    nr: int = None
-    hits: int = None
-    p0: float = None
-    chromsize: int = None
+    nq: int = 0
+    nr: int = 0
+    hits: int = 0
+    p0: float = 0
+    chromsize: int = 0
 
 
 @dataclass
 class ProjSpace:
-    name: str = None
-    subspaces: Tuple[str] = None
-    nq: int = None
-    nr: int = None
-    hits: int = None
-    p0: float = None
-    pval: float = None
-    ratio: float = None
+    name: str = ""
+    subspaces: Tuple[str, ...] = ("",)
+    nq: int = 0
+    nr: int = 0
+    hits: int = 0
+    p0: float = 0
+    pval: float = 1
+    ratio: float = 0
     direction: str = "undefined"
 
 
 def process_proj_subspaces(dfq: pd.DataFrame,
                            dfr: pd.DataFrame,
                            chromsizes: Dict[str, int],
-                           subspaces: Tuple[str],
+                           subspaces: Tuple[str, ...],
                            subspace_col: str = 'chrom') -> Dict[str, ProjSubspace]:
     subspaces_data = {subspace: ProjSubspace() for subspace in subspaces}
     for subspace, subspace_data in subspaces_data.items():
@@ -66,7 +66,7 @@ def process_proj_subspaces(dfq: pd.DataFrame,
 
 
 def process_proj_spaces(subspaces_data: Dict[str, ProjSubspace],
-                        spaces: Dict[str, Tuple[str]]) -> Tuple[ProjSpace]:
+                        spaces: Dict[str, Tuple[str, ...]]) -> Tuple[ProjSpace, ...]:
     spaces_data = tuple(ProjSpace(name=space_name, subspaces=space_subspaces)
                        for space_name, space_subspaces in spaces.items())
     for space_data in spaces_data:
@@ -91,7 +91,7 @@ def process_proj_spaces(subspaces_data: Dict[str, ProjSubspace],
                 else:
                     direction = 'attraction'
             else:
-                ratio = None
+                ratio = float('nan')
                 direction = "undefined"
         else:
             pval = 1

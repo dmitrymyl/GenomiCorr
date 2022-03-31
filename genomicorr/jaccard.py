@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import Callable, Dict, Tuple, Union
+from typing import Callable, Dict, Tuple, Union, cast
 import numpy as np
 import pandas as pd
 import bioframe as bf
-from .utils import calc_pvalue, NDArrayInt, NDArrayFloat
+from .utils import calc_pvalue, NDArrayInt, NDArrayFloat, I_gen
 
 
 def arr_inter_union(qstarts: NDArrayInt,
@@ -11,16 +11,16 @@ def arr_inter_union(qstarts: NDArrayInt,
                     rstarts: NDArrayInt,
                     rends: NDArrayInt,
                     mergeq: bool = True,
-                    merger: bool = True) -> Tuple[float, float]:
+                    merger: bool = True) -> Tuple[int, int]:
     if len(qstarts) != len(qends):
         raise ValueError
     if len(rstarts)  != len(rends):
         raise ValueError
     
     if len(qstarts) == 0:
-        return 0.0, (rends - rstarts).sum()
+        return 0, (rends - rstarts).sum()
     if len(rstarts) == 0:
-        return 0.0, (qends - qstarts).sum()
+        return 0, (qends - qstarts).sum()
 
     if mergeq:
         _, qstarts_m, qends_m = bf.arrops.merge_intervals(qstarts, qends)
@@ -37,13 +37,13 @@ def arr_inter_union(qstarts: NDArrayInt,
     dfq_m = pd.DataFrame({'chrom': 'chr', 'start': qstarts_m, 'end': qends_m})
     dfr_m = pd.DataFrame({'chrom': 'chr', 'start': rstarts_m, 'end': rends_m})
     overlap = bf.overlap(dfq_m, dfr_m, how='outer', return_overlap=True)
-    n_inter = (overlap['overlap_end'] - overlap['overlap_start']).sum()
+    n_inter = int((overlap['overlap_end'] - overlap['overlap_start']).sum())
     n_union = int((overlap.loc[:, ['end', 'end_']].max(axis=1) - overlap.loc[:, ['start', 'start_']].min(axis=1)).sum())
     return n_inter, n_union
 
 
-def calc_ji_stat(inter: Union[float, NDArrayFloat],
-                 union: Union[float, NDArrayFloat]) -> Union[float, NDArrayFloat]:
+def calc_ji_stat(inter: I_gen,
+                 union: I_gen) -> Union[float, NDArrayFloat]:
     return inter / union
 
 
@@ -85,7 +85,7 @@ def permute_intervals(starts: NDArrayInt,
                       chromsize: int) -> Tuple[NDArrayInt, NDArrayInt]:
     rng = np.random.default_rng()
 
-    right_end = ends.max()
+    # right_end = ends.max()
     widths = ends - starts
     new_starts = rng.integers(0, high=chromsize, size=widths.shape[0], endpoint=False)
     new_ends = new_starts + widths
@@ -102,45 +102,47 @@ def permute_intervals(starts: NDArrayInt,
 
 @dataclass
 class JaccardSubspace:
-    nq: int = None
-    nr: int = None
-    inter: float = None
-    union: float = None
-    null_inters: NDArrayInt = None
-    null_unions: NDArrayInt = None
-    chromsize: int = None
+    nq: int = 0
+    nr: int = 0
+    inter: int = 0
+    union: int = 0
+    null_inters: NDArrayInt = np.array([], dtype='int')
+    null_unions: NDArrayInt = np.array([], dtype='int')
+    chromsize: int = 0
 
 
 @dataclass
 class JaccardSpace:
-    name: str = None
-    subspaces: Tuple[str] = None
-    nq: int = None
-    nr: int = None
-    inter: float = None
-    union: float = None
-    null_inters: NDArrayInt = None
-    null_unions: NDArrayInt = None
-    ji: float = None
-    null_jis: NDArrayFloat = None
-    pval: float = None
-    direction: str = None
+    name: str = ""
+    subspaces: Tuple[str, ...] = ("",)
+    nq: int = 0
+    nr: int = 0
+    inter: int = 0
+    union: int = 0
+    null_inters: NDArrayInt = np.array([], dtype='int')
+    null_unions: NDArrayInt = np.array([], dtype='int')
+    ji: float = 0
+    null_jis: NDArrayFloat = np.array([], dtype='float')
+    pval: float = 1
+    direction: str = "undefined"
 
 
 def process_jaccard_subspaces(dfq: pd.DataFrame,
                               dfr: pd.DataFrame,
                               chromsizes: Dict[str, int],
-                              subspaces: Tuple[str],
+                              subspaces: Tuple[str, ...],
                               subspace_col: str = 'chrom',
                               permutations: int = 100,
-                              permute: Union[str, Callable] = "rearrange") -> Dict[str, JaccardSubspace]:
+                              permute: Union[str,
+                                             Callable[[NDArrayInt, NDArrayInt, int],
+                                                      Tuple[NDArrayInt, NDArrayInt]]] = "rearrange") -> Dict[str, JaccardSubspace]:
     subspaces_data = {subspace: JaccardSubspace() for subspace in subspaces}
     if permute == "rearrange":
         permutation_func = rearrange_intervals
     elif permute == "permute":
         permutation_func = permute_intervals
     elif callable(permute):
-        permutation_func = permute
+        permutation_func = cast(Callable, permute)
     else:
         raise ValueError("`permute` is neither 'rearrange', 'permute' or callable.")
 
@@ -154,6 +156,8 @@ def process_jaccard_subspaces(dfq: pd.DataFrame,
         subspace_data.nq = nq
         subspace_data.nr = nr
         subspace_data.chromsize = chromsize
+        null_inters: Union[Tuple[int, ...], NDArrayInt]
+        null_unions: Union[Tuple[int, ...], NDArrayInt]
 
         if subspace_data.nq == 0 and subspace_data.nr == 0:
             inter = 0
@@ -182,23 +186,25 @@ def process_jaccard_subspaces(dfq: pd.DataFrame,
                                            subr_starts,
                                            subr_ends,
                                            merger=False)
-            null_inters, null_unions = tuple(zip(*(arr_inter_union(*permutation_func(subq_starts, subq_ends, chromsize),
-                                                                   subr_starts,
-                                                                   subr_ends,
-                                                                   merger=False)
-                                                for _ in range(permutations))))
             
-            
+            result = tuple(arr_inter_union(*permutation_func(subq_starts, subq_ends, chromsize),
+                                           subr_starts,
+                                           subr_ends,
+                                           merger=False)
+                           for _ in range(permutations))
+
+            null_inters, null_unions = zip(*result)
+
         subspace_data.inter = inter
         subspace_data.union = union
-        subspace_data.null_inters = null_inters
-        subspace_data.null_unions = null_unions
+        subspace_data.null_inters = np.array(null_inters, dtype='int')
+        subspace_data.null_unions = np.array(null_unions, dtype='int')
         
     return subspaces_data
 
 
 def process_jaccard_spaces(subspaces_data: Dict[str, JaccardSubspace],
-                           spaces: Dict[str, Tuple[str]]) -> Tuple[JaccardSpace]:
+                           spaces: Dict[str, Tuple[str, ...]]) -> Tuple[JaccardSpace, ...]:
     spaces_data = tuple(JaccardSpace(name=space_name, subspaces=space_subspaces)
                        for space_name, space_subspaces in spaces.items())
     for space_data in spaces_data:
@@ -215,8 +221,8 @@ def process_jaccard_spaces(subspaces_data: Dict[str, JaccardSubspace],
         space_data.null_unions = np.array([subspaces_data[subspace].null_unions
                                            for subspace in space_data.subspaces]).sum(axis=0)
         if space_data.union > 0:
-            space_data.ji = calc_ji_stat(space_data.inter, space_data.union)
-            space_data.null_jis = calc_ji_stat(space_data.null_inters, space_data.null_unions)
+            space_data.ji = cast(float, calc_ji_stat(space_data.inter, space_data.union))
+            space_data.null_jis = cast(NDArrayFloat, calc_ji_stat(space_data.null_inters, space_data.null_unions))
             pval = calc_pvalue(space_data.null_jis, space_data.ji)
 
             if pval < 0.5:
@@ -226,7 +232,7 @@ def process_jaccard_spaces(subspaces_data: Dict[str, JaccardSubspace],
                 space_data.pval = (1 - pval) * 2
                 space_data.direction = 'repulsion'
         else:
-            space_data.ji = None
+            space_data.ji = float('nan')
             space_data.null_jis = np.array([])
             space_data.pval = 1
             space_data.direction = "undefined"

@@ -1,4 +1,4 @@
-from typing import Collection, Dict, List, Tuple
+from typing import Dict, Tuple
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass
@@ -7,24 +7,25 @@ from .utils import calc_pvalue, NDArrayInt, NDArrayFloat
 
 @dataclass
 class ADTSubspace:
-    absdists: NDArrayFloat = None
-    stat: float = None
-    nulldist: NDArrayFloat = None
-    nq: int = None
-    nr: int = None
-    nobs: int = None
-    chromsize: int = None
+    absdists: NDArrayFloat = np.array([], dtype='float')
+    stat: float = 0
+    nulldist: NDArrayFloat = np.array([], dtype='float')
+    nq: int = 0
+    nr: int = 0
+    nobs: int = 0
+    chromsize: int = 0
+
 
 @dataclass
 class ADTSpace:
-    name: str = None
-    subspaces: Tuple[str] = None
-    nq: int = None
-    nr: int = None
-    stat: float = None
-    nulldist: NDArrayFloat = None
-    pval: float = None
-    direction: str = None
+    name: str = ""
+    subspaces: Tuple[str, ...] = ("", )
+    nq: int = 0
+    nr: int = 0
+    stat: float = 0
+    nulldist: NDArrayFloat = np.array([], dtype='float')
+    pval: float = 1
+    direction: str = ""
 
 
 def randomize_centers(chromsize: int,
@@ -46,7 +47,7 @@ def calc_absdist_stat(absdists: NDArrayFloat) -> float:
 def process_absdist_subspaces(dfq: pd.DataFrame,
                               dfr: pd.DataFrame,
                               chromsizes: Dict[str, int],
-                              subspaces: Tuple[str],
+                              subspaces: Tuple[str, ...],
                               subspace_col: str = 'chrom',
                               permutations: int = 100) -> Dict[str, ADTSubspace]:
     subspaces_data = {subspace: ADTSubspace()
@@ -79,7 +80,7 @@ def process_absdist_subspaces(dfq: pd.DataFrame,
 
 
 def process_absdist_spaces(subspaces_data: Dict[str, ADTSubspace],
-                           spaces: Dict[str, Tuple[str]]) -> Tuple[ADTSpace]:
+                           spaces: Dict[str, Tuple[str, ...]]) -> Tuple[ADTSpace, ...]:
     spaces_data = tuple(ADTSpace(name=space_name, subspaces=space_subspaces)
                         for space_name, space_subspaces in spaces.items())
     for space_data in spaces_data:
@@ -91,7 +92,7 @@ def process_absdist_spaces(subspaces_data: Dict[str, ADTSubspace],
         n_obs = sum(subspaces_data[subspace].nobs
                     for subspace in space_data.subspaces)
         if n_obs == 0:
-            space_data.stat = None
+            space_data.stat = float('nan')
             space_data.nulldist = np.array([])
             space_data.pval = 1
             space_data.direction = 'undefined'

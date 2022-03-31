@@ -13,24 +13,24 @@ uniDist = ss.uniform(scale=0.5)
 
 @dataclass
 class RDTSubspace:
-    reldists: NDArrayFloat = None
-    nq: int = None
-    nr: int = None
+    reldists: NDArrayFloat = np.array([], dtype=float)
+    nq: int = 0
+    nr: int = 0
 
 
 @dataclass
 class RDTSpace:
-    name: str = None
-    subspaces: Tuple[str] = None
-    reldists: NDArrayFloat = None
-    nq: int = None
-    nr: int = None
-    ks_pval: float = None
-    stat: float = None
-    nulldist: NDArrayFloat = None
-    reldist_pval: float = None
-    ecdf_corr: float = None
-    direction: str = None
+    name: str = ""
+    subspaces: Tuple[str, ...] = ("", )
+    reldists: NDArrayFloat = np.array([], dtype=float)
+    nq: int = 0
+    nr: int = 0
+    ks_pval: float = 1
+    stat: float = float('nan')
+    nulldist: NDArrayFloat = np.array([], dtype='float')
+    reldist_pval: float = 1
+    ecdf_corr: float = float('nan')
+    direction: str = "undefined"
 
 
 def calc_reldists(q: NDArrayInt,
@@ -71,7 +71,7 @@ def null_reldist_stats(size: int,
 
 def process_reldist_subspaces(dfq: pd.DataFrame,
                               dfr: pd.DataFrame,
-                              subspaces: Tuple[str],
+                              subspaces: Tuple[str, ...],
                               subspace_col: str = 'chrom') -> Dict[str, RDTSubspace]:
 
     subspaces_data = {subspace: RDTSubspace() for subspace in subspaces}
@@ -92,8 +92,8 @@ def process_reldist_subspaces(dfq: pd.DataFrame,
 
 
 def process_reldist_spaces(subspaces_data: Dict[str, RDTSubspace],
-                           spaces: Dict[str, Tuple[str]],
-                           permutations: int) -> Tuple[RDTSpace]:
+                           spaces: Dict[str, Tuple[str, ...]],
+                           permutations: int) -> Tuple[RDTSpace, ...]:
 
     spaces_data = tuple(RDTSpace(name=space_name, subspaces=space_subspaces)
                         for space_name, space_subspaces in spaces.items())
@@ -109,10 +109,10 @@ def process_reldist_spaces(subspaces_data: Dict[str, RDTSubspace],
     
         if len(space_reldists) == 0:
             space_data.ks_pval = 1
-            space_data.stat = None
+            space_data.stat = float('nan')
             space_data.nulldist = np.array(())
             space_data.reldist_pval = 1
-            space_data.ecdf_corr = None
+            space_data.ecdf_corr = float('nan')
             space_data.direction = 'undefined'
         else:
             space_data.ks_pval = reldist_ks_test(space_reldists)
