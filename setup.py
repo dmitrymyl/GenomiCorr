@@ -2,7 +2,7 @@ from setuptools import setup
 
 
 setup(name='GenomiCorr',
-      version='0.2.1',
+      version='0.2.2',
       description='Genomic regions correlation analysis toolkit.',
       url='http://github.com/dmitrymyl/GenomiCorr',
       author='Dmitry Mylarshchikov',

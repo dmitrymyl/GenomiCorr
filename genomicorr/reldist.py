@@ -35,11 +35,8 @@ class RDTSpace:
 
 def calc_reldists(q: NDArrayInt,
                   r: NDArrayInt) -> NDArrayFloat:
-    q_mod = q
-    if np.min(q) < np.min(r):
-        q_mod = q_mod[1:]
-    if np.max(q) > np.max(r):
-        q_mod = q_mod[:-1]
+    q_mod = np.sort(q)
+    q_mod = q_mod[(q_mod > np.min(r)) & (q_mod < np.max(r))]
     indices = np.searchsorted(r, q_mod) - 1
     rel_dists = np.min(np.stack((q_mod - r[indices], r[indices + 1] - q_mod), axis=1), axis=1) / np.abs(r[indices + 1] - r[indices])
     return rel_dists

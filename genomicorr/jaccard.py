@@ -66,6 +66,8 @@ def rearrange_intervals(starts: NDArrayInt,
         starting_point = rng.integers(0, starting_gap, 1)[0]
     elif starting_gap < 0:
         starting_point = rng.integers(starting_gap, 0, 1)[0]
+    else:
+        starting_point = 0
 
     new_starts = np.cumsum(np.insert(np.sum(np.stack((widths[:-1], gaps[:-1])), axis=0), 0, starting_point))
     new_ends = new_starts + widths
